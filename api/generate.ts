@@ -1,4 +1,4 @@
-﻿import { encode, getSupabaseConfig, supabaseGet, supabaseInsert } from './_supabase';
+﻿import { encode, getSupabaseConfig, supabaseGet, supabaseInsert } from './supabase.js';
 
 const SIMILARITY_THRESHOLD = 0.99;
 
@@ -330,3 +330,4 @@ export default async function handler(req: any, res: any) {
     res.status(500).json({ error: message });
   }
 }
+

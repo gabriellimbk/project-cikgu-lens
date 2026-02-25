@@ -1,5 +1,4 @@
-﻿import repositoryStorage from '../components/repositoryStorage';
-import { encode, getSupabaseConfig, supabaseDeleteById, supabaseGet, supabaseInsert } from './_supabase';
+﻿import { getSupabaseConfig, supabaseDeleteById, supabaseGet, supabaseInsert } from './supabase.js';
 
 type RepositoryEntry = {
   id: string;
@@ -8,7 +7,7 @@ type RepositoryEntry = {
   created_at?: string;
 };
 
-const inMemoryRepository = [...(repositoryStorage as RepositoryEntry[])];
+const inMemoryRepository: RepositoryEntry[] = [];
 
 const readPayload = (body: unknown): Record<string, unknown> => {
   if (!body) return {};
