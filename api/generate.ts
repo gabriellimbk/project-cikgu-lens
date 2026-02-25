@@ -1,4 +1,6 @@
-﻿const SIMILARITY_THRESHOLD = 0.99;
+﻿import { encode, getSupabaseConfig, supabaseGet, supabaseInsert } from './_supabase';
+
+const SIMILARITY_THRESHOLD = 0.99;
 
 type Evidence = {
   point: string;
@@ -153,6 +155,66 @@ const findSimilarCachedResult = (cache: CachedAnalysisEntry[], normalizedInput: 
   return null;
 };
 
+const mapSupabaseCacheRows = (rows: any[]): CachedAnalysisEntry[] =>
+  rows
+    .filter((row) => typeof row?.normalized_text === 'string' && row?.result)
+    .map((row) => ({
+      text: typeof row?.text === 'string' ? row.text : '',
+      normalizedText: row.normalized_text,
+      result: row.result as GenerationResult,
+      createdAt: typeof row?.created_at === 'string' ? row.created_at : ''
+    }));
+
+const loadGeneratedCache = async (): Promise<CachedAnalysisEntry[]> => {
+  const supabaseEnabled = Boolean(getSupabaseConfig());
+  if (!supabaseEnabled) {
+    return generatedCache;
+  }
+
+  const rows = await supabaseGet('generated_analyses?select=text,normalized_text,result,created_at&order=created_at.desc&limit=500');
+  return mapSupabaseCacheRows(rows ?? []);
+};
+
+const loadExactGeneratedResult = async (normalizedInput: string): Promise<GenerationResult | null> => {
+  const supabaseEnabled = Boolean(getSupabaseConfig());
+  if (!supabaseEnabled) {
+    const local = generatedCache.find((item) => item.normalizedText === normalizedInput);
+    return local?.result ?? null;
+  }
+
+  const rows = await supabaseGet(
+    `generated_analyses?select=result&normalized_text=eq.${encode(normalizedInput)}&order=created_at.desc&limit=1`
+  );
+
+  if (!rows || rows.length === 0) {
+    return null;
+  }
+
+  return rows[0]?.result ? (rows[0].result as GenerationResult) : null;
+};
+
+const storeGeneratedResult = async (text: string, normalizedText: string, result: GenerationResult): Promise<void> => {
+  const payload = {
+    text,
+    normalized_text: normalizedText,
+    result,
+    created_at: new Date().toISOString()
+  };
+
+  const supabaseEnabled = Boolean(getSupabaseConfig());
+  if (!supabaseEnabled) {
+    generatedCache.unshift({
+      text,
+      normalizedText,
+      result,
+      createdAt: payload.created_at
+    });
+    return;
+  }
+
+  await supabaseInsert('generated_analyses', payload);
+};
+
 const extractOutputText = (data: any): string => {
   if (typeof data?.output_text === 'string') {
     return data.output_text;
@@ -213,11 +275,19 @@ export default async function handler(req: any, res: any) {
 
   try {
     const normalizedInput = normalizeText(text);
-    const cachedResult = findSimilarCachedResult(generatedCache, normalizedInput);
 
-    if (cachedResult) {
+    const exactResult = await loadExactGeneratedResult(normalizedInput);
+    if (exactResult) {
       res.setHeader('Cache-Control', 'no-store');
-      res.status(200).json(cachedResult);
+      res.status(200).json(exactResult);
+      return;
+    }
+
+    const cacheSnapshot = await loadGeneratedCache();
+    const similarResult = findSimilarCachedResult(cacheSnapshot, normalizedInput);
+    if (similarResult) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json(similarResult);
       return;
     }
 
@@ -251,12 +321,7 @@ export default async function handler(req: any, res: any) {
     const outputText = extractOutputText(openAiData);
     const result = JSON.parse(outputText) as GenerationResult;
 
-    generatedCache.push({
-      text,
-      normalizedText: normalizedInput,
-      result,
-      createdAt: new Date().toISOString()
-    });
+    await storeGeneratedResult(text, normalizedInput, result);
 
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json(result);

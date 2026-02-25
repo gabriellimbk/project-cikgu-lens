@@ -5,6 +5,11 @@ import RepositoryButton from './components/RepositoryButton';
 import Repository from './components/Repository';
 import repositoryEntries from './components/repositoryEntries';
 import { generateLensAnalysis } from './openaiService';
+import {
+  deleteRepositoryEntry as deleteRepositoryEntryApi,
+  fetchRepositoryEntries,
+  saveRepositoryEntry as saveRepositoryEntryApi
+} from './repositoryService';
 import { GenerationResult, RepositoryEntry } from './types';
 
 const REPOSITORY_STORAGE_KEY = 'cikgu_lens_repository_v1';
@@ -48,6 +53,27 @@ const App: React.FC = () => {
     window.localStorage.setItem(REPOSITORY_STORAGE_KEY, JSON.stringify(repositoryData));
   }, [repositoryData]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRepositoryFromApi = async () => {
+      try {
+        const remoteEntries = await fetchRepositoryEntries();
+        if (!cancelled && Array.isArray(remoteEntries) && remoteEntries.length > 0) {
+          setRepositoryData(remoteEntries);
+        }
+      } catch {
+        // Keep local fallback if API repository is unavailable.
+      }
+    };
+
+    loadRepositoryFromApi();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleOpenRepo = () => setRepoOpen(true);
   const handleCloseRepo = () => setRepoOpen(false);
 
@@ -76,7 +102,7 @@ const App: React.FC = () => {
     }
   }, [text]);
 
-  const handleSaveToRepository = useCallback(() => {
+  const handleSaveToRepository = useCallback(async () => {
     if (!isTeacherMode || !result) return;
 
     const baseTitle = repoTitle.trim();
@@ -98,15 +124,26 @@ const App: React.FC = () => {
       result
     };
 
-    setRepositoryData((prev) => [newEntry, ...prev]);
-    setRepoTitle('');
-    setError(null);
-    setSaveNotice(`Disimpan ke repository sebagai: ${finalTitle}`);
+    try {
+      await saveRepositoryEntryApi(newEntry);
+      setRepositoryData((prev) => [newEntry, ...prev]);
+      setRepoTitle('');
+      setError(null);
+      setSaveNotice(`Disimpan ke repository sebagai: ${finalTitle}`);
+    } catch (err: any) {
+      setError(err?.message || 'Gagal menyimpan ke repository.');
+    }
   }, [isTeacherMode, repoTitle, repositoryData, result, text]);
 
-  const handleDeleteRepositoryEntry = useCallback((entryId: string) => {
-    setRepositoryData((prev) => prev.filter((entry) => entry.id !== entryId));
-    setSaveNotice(`Rekod dipadam: ${entryId}`);
+  const handleDeleteRepositoryEntry = useCallback(async (entryId: string) => {
+    try {
+      await deleteRepositoryEntryApi(entryId);
+      setRepositoryData((prev) => prev.filter((entry) => entry.id !== entryId));
+      setSaveNotice(`Rekod dipadam: ${entryId}`);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.message || 'Gagal memadam rekod repository.');
+    }
   }, []);
 
   const closeTeacherAuthModal = useCallback(() => {
