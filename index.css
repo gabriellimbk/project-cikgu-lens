@@ -1,0 +1,97 @@
+﻿:root {
+  --bg: #30343a;
+  --bg-alt: #25282d;
+  --surface: #f4f5f2;
+  --surface-soft: #eceee9;
+  --border: #2a9d77;
+  --text: #1f242b;
+  --muted: #5c6470;
+  --primary: #1f9b75;
+  --primary-strong: #167b5d;
+  --primary-soft: #d8efe7;
+  --success: #1f9b75;
+  --danger: #d03856;
+  --accent: #f5b14b;
+  --ink: #2f3139;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', 'Sora', sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(900px 320px at 50% 100%, rgba(31, 155, 117, 0.24), transparent 64%),
+    radial-gradient(780px 260px at 100% 0%, rgba(245, 177, 75, 0.1), transparent 56%),
+    linear-gradient(160deg, var(--bg), var(--bg-alt));
+}
+
+.app-shell {
+  background: transparent;
+}
+
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+}
+
+.surface-soft {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+}
+
+.input-surface {
+  background: #fafcf8;
+  border: 1px solid #8ecdb8;
+  color: var(--text);
+}
+
+.input-surface:focus {
+  border-color: #1f9b75;
+  box-shadow: 0 0 0 3px rgba(31, 155, 117, 0.22);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), #22ad83);
+  color: #fff;
+  border: none;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-strong), #1a926f);
+}
+
+.btn-secondary {
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.hero-gradient {
+  background: linear-gradient(145deg, #1a7f62, #1f9b75 55%, #22ad83);
+  box-shadow: 0 16px 40px rgba(7, 61, 47, 0.35);
+}
+
+.empty-state {
+  border: 1px dashed #6abda0;
+  background: rgba(244, 245, 242, 0.8);
+}
+
+.console-switch {
+  background: rgba(244, 245, 242, 0.95);
+  border: 1px solid rgba(31, 155, 117, 0.55);
+  backdrop-filter: blur(8px);
+  border-radius: 0.9rem;
+  padding: 0.25rem;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+}
+
+.console-switch button {
+  border-radius: 0.65rem;
+}
