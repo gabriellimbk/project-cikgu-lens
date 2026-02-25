@@ -1,6 +1,6 @@
 ﻿const getSupabaseConfig = () => {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
 
   if (!url || !key) {
     return null;
@@ -24,6 +24,25 @@ const buildHeaders = (key: string, includeJson = false) => {
 
 const encode = (value: string) => encodeURIComponent(value);
 
+const parseErrorText = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json();
+    const message =
+      payload?.message ||
+      payload?.error_description ||
+      payload?.error ||
+      payload?.hint ||
+      JSON.stringify(payload);
+    return String(message);
+  } catch {
+    try {
+      return await response.text();
+    } catch {
+      return 'Unknown Supabase error';
+    }
+  }
+};
+
 const supabaseGet = async (path: string): Promise<any[] | null> => {
   const config = getSupabaseConfig();
   if (!config) return null;
@@ -34,7 +53,8 @@ const supabaseGet = async (path: string): Promise<any[] | null> => {
   });
 
   if (!response.ok) {
-    throw new Error(`Supabase GET failed: ${response.status}`);
+    const detail = await parseErrorText(response);
+    throw new Error(`Supabase GET failed (${response.status}): ${detail}`);
   }
 
   return (await response.json()) as any[];
@@ -55,7 +75,8 @@ const supabaseInsert = async (table: string, row: Record<string, unknown>, onCon
   });
 
   if (!response.ok) {
-    throw new Error(`Supabase INSERT failed: ${response.status}`);
+    const detail = await parseErrorText(response);
+    throw new Error(`Supabase INSERT failed (${response.status}): ${detail}`);
   }
 };
 
@@ -72,7 +93,8 @@ const supabaseDeleteById = async (table: string, id: string): Promise<void> => {
   });
 
   if (!response.ok) {
-    throw new Error(`Supabase DELETE failed: ${response.status}`);
+    const detail = await parseErrorText(response);
+    throw new Error(`Supabase DELETE failed (${response.status}): ${detail}`);
   }
 };
 

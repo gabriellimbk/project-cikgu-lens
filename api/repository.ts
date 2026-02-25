@@ -120,7 +120,8 @@ export default async function handler(req: any, res: any) {
     }
 
     res.status(405).json({ error: 'Kaedah tidak dibenarkan.' });
-  } catch (error) {
-    res.status(500).json({ error: 'Ralat semasa mengurus repository.' });
+  } catch (error: any) {
+    const message = typeof error?.message === 'string' ? error.message : 'Ralat semasa mengurus repository.';
+    res.status(500).json({ error: message });
   }
 }
