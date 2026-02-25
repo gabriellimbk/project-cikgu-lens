@@ -325,7 +325,8 @@ export default async function handler(req: any, res: any) {
 
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json(result);
-  } catch {
-    res.status(500).json({ error: 'Ralat semasa memproses permintaan.' });
+  } catch (error: any) {
+    const message = typeof error?.message === 'string' ? error.message : 'Ralat semasa memproses permintaan.';
+    res.status(500).json({ error: message });
   }
 }
