@@ -10,10 +10,10 @@ import {
   fetchRepositoryEntries,
   saveRepositoryEntry as saveRepositoryEntryApi
 } from './repositoryService';
+import { verifyTeacherPassword } from './teacherAuthService';
 import { GenerationResult, RepositoryEntry } from './types';
 
 const REPOSITORY_STORAGE_KEY = 'cikgu_lens_repository_v1';
-const TEACHER_PASSWORD = 'Password1';
 
 type ConsoleMode = 'student' | 'teacher';
 
@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [showTeacherAuthModal, setShowTeacherAuthModal] = useState(false);
   const [teacherPasswordInput, setTeacherPasswordInput] = useState('');
   const [teacherAuthError, setTeacherAuthError] = useState<string | null>(null);
+  const [teacherAuthLoading, setTeacherAuthLoading] = useState(false);
 
   const isTeacherMode = useMemo(() => consoleMode === 'teacher', [consoleMode]);
 
@@ -167,14 +168,20 @@ const App: React.FC = () => {
     setTeacherPasswordInput('');
   }, [teacherAuthenticated]);
 
-  const handleTeacherAuthSubmit = useCallback(() => {
-    if (teacherPasswordInput === TEACHER_PASSWORD) {
+  const handleTeacherAuthSubmit = useCallback(async () => {
+    setTeacherAuthLoading(true);
+    setTeacherAuthError(null);
+
+    try {
+      await verifyTeacherPassword(teacherPasswordInput);
       setTeacherAuthenticated(true);
       setConsoleMode('teacher');
       closeTeacherAuthModal();
-      return;
+    } catch (err: any) {
+      setTeacherAuthError(err?.message || 'Pengesahan Teacher Console gagal.');
+    } finally {
+      setTeacherAuthLoading(false);
     }
-    setTeacherAuthError('Kata laluan tidak tepat.');
   }, [closeTeacherAuthModal, teacherPasswordInput]);
 
   return (
@@ -243,9 +250,10 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={handleTeacherAuthSubmit}
-                className="px-4 py-2 rounded-lg bg-amber-300 border border-amber-400 text-black font-semibold hover:bg-amber-400"
+                disabled={teacherAuthLoading}
+                className="px-4 py-2 rounded-lg bg-amber-300 border border-amber-400 text-black font-semibold hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Masuk
+                {teacherAuthLoading ? 'Mengesahkan...' : 'Masuk'}
               </button>
             </div>
           </div>
@@ -266,8 +274,10 @@ const App: React.FC = () => {
               <button
                 onClick={handleGenerate}
                 disabled={loading}
-                className={`mt-4 w-full py-4 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${
-                  loading ? 'bg-brand-500/60 text-white cursor-not-allowed' : 'btn-primary active:scale-[0.98]'
+                className={`mt-4 w-full py-4 rounded-xl font-bold transition-all shadow-lg ${
+                  loading
+                    ? 'bg-brand-500/60 text-white cursor-not-allowed flex items-center justify-center gap-2'
+                    : 'btn-primary active:scale-[0.98] grid grid-cols-[auto,1fr] items-center gap-4 px-8'
                 }`}
               >
                 {loading ? (
@@ -280,10 +290,10 @@ const App: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
-                    <span className="text-center">Teroka Idea Baharu Dengan Menggunakan TIGA Lensa</span>
+                    <span className="text-center pr-7">Teroka Idea Baharu Dengan Menggunakan TIGA Lensa</span>
                   </>
                 )}
               </button>

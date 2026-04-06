@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'path';
 import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import teacherAuthHandler from './api/auth/teacher';
+import repositoryHandler from './api/repository';
 
 const GENERATED_CACHE_PATH = path.resolve(__dirname, 'storage', 'generatedAnalyses.json');
 const SIMILARITY_THRESHOLD = 0.99;
@@ -199,6 +201,68 @@ const extractOutputText = (data: any): string => {
   return textChunks.join('');
 };
 
+type ApiHandler = (req: any, res: any) => Promise<void> | void;
+
+const parseBody = async (req: any): Promise<unknown> =>
+  new Promise((resolve) => {
+    let body = '';
+
+    req.on('data', (chunk: Buffer | string) => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      if (!body) {
+        resolve(undefined);
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        resolve(body);
+      }
+    });
+
+    req.on('error', () => resolve(undefined));
+  });
+
+const createApiResponseAdapter = (res: any) => {
+  const adapted = res as any;
+
+  adapted.status = (code: number) => {
+    res.statusCode = code;
+    return adapted;
+  };
+
+  adapted.json = (payload: unknown) => {
+    if (!res.headersSent) {
+      res.setHeader('Content-Type', 'application/json');
+    }
+    res.end(JSON.stringify(payload));
+    return adapted;
+  };
+
+  return adapted;
+};
+
+const serverlessDevProxy = (route: string, handler: ApiHandler): Plugin => ({
+  name: `serverless-dev-proxy:${route}`,
+  configureServer(server) {
+    server.middlewares.use(route, async (req, res) => {
+      const originalUrl = req.originalUrl || req.url || route;
+      const url = new URL(originalUrl, 'http://127.0.0.1');
+      const adaptedReq = req as any;
+      adaptedReq.query = Object.fromEntries(url.searchParams.entries());
+      adaptedReq.body =
+        req.method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase()) ? await parseBody(req) : undefined;
+
+      const adaptedRes = createApiResponseAdapter(res);
+      await handler(adaptedReq, adaptedRes);
+    });
+  }
+});
+
 const openAiDevProxy = (apiKey: string | undefined): Plugin => ({
   name: 'openai-dev-proxy',
   configureServer(server) {
@@ -305,12 +369,18 @@ const openAiDevProxy = (apiKey: string | undefined): Plugin => ({
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  Object.assign(process.env, env);
   return {
     server: {
       port: 3000,
       host: '0.0.0.0'
     },
-    plugins: [react(), openAiDevProxy(env.OPENAI_API_KEY)],
+    plugins: [
+      react(),
+      openAiDevProxy(env.OPENAI_API_KEY),
+      serverlessDevProxy('/api/repository', repositoryHandler),
+      serverlessDevProxy('/api/auth/teacher', teacherAuthHandler)
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.')

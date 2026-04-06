@@ -1,4 +1,5 @@
-﻿import { getSupabaseConfig, supabaseDeleteById, supabaseGet, supabaseInsert } from './supabase.js';
+﻿import { getConfiguredTeacherPassword, isTeacherRequestAuthorized } from './teacherAuth.js';
+import { getSupabaseConfig, supabaseDeleteById, supabaseGet, supabaseInsert } from './supabase.js';
 
 type RepositoryEntry = {
   id: string;
@@ -78,6 +79,20 @@ const deleteRepositoryEntry = async (entryId: string): Promise<void> => {
   await supabaseDeleteById('repository_entries', entryId);
 };
 
+const ensureTeacherAccess = (req: any, res: any): boolean => {
+  if (!getConfiguredTeacherPassword()) {
+    res.status(503).json({ error: 'TEACHER_PASSWORD belum disetkan.' });
+    return false;
+  }
+
+  if (!isTeacherRequestAuthorized(req)) {
+    res.status(401).json({ error: 'Akses Teacher Console diperlukan.' });
+    return false;
+  }
+
+  return true;
+};
+
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') {
@@ -87,6 +102,10 @@ export default async function handler(req: any, res: any) {
     }
 
     if (req.method === 'POST') {
+      if (!ensureTeacherAccess(req, res)) {
+        return;
+      }
+
       const payload = readPayload(req.body);
       const id = typeof payload.id === 'string' ? payload.id.trim() : '';
       const text = typeof payload.text === 'string' ? payload.text.trim() : '';
@@ -103,6 +122,10 @@ export default async function handler(req: any, res: any) {
     }
 
     if (req.method === 'DELETE') {
+      if (!ensureTeacherAccess(req, res)) {
+        return;
+      }
+
       const queryId = typeof req.query?.id === 'string' ? req.query.id : '';
       const payload = readPayload(req.body);
       const bodyId = typeof payload.id === 'string' ? payload.id : '';
