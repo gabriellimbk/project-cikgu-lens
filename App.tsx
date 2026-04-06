@@ -359,7 +359,7 @@ const App: React.FC = () => {
             )}
 
             {result && (
-              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <div className="space-y-8 result-stack-enter">
                 <div className="hero-gradient text-white rounded-3xl p-8 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-10">
                     <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24">

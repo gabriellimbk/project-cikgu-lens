@@ -1,4 +1,8 @@
-﻿:root {
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
   --bg: #30343a;
   --bg-alt: #25282d;
   --surface: #f4f5f2;
@@ -94,4 +98,27 @@ body {
 
 .console-switch button {
   border-radius: 0.65rem;
+}
+
+.result-stack-enter {
+  animation: result-stack-enter 0.7s ease-out both;
+}
+
+.text-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@keyframes result-stack-enter {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

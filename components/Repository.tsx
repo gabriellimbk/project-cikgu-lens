@@ -38,7 +38,7 @@ const Repository: React.FC<RepositoryProps> = ({ entries, onSelect, onClose, isT
                 </button>
               )}
             </div>
-            <div className="text-slate-700 text-sm line-clamp-2">
+            <div className="text-slate-700 text-sm text-clamp-2">
               {entry.text.slice(0, 200)}
               {entry.text.length > 200 ? '...' : ''}
             </div>
