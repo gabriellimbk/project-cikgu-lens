@@ -1,4 +1,5 @@
 ﻿import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { GraduationCap, BookOpenCheck, FileText, Bookmark, Sparkles, AlertCircle, Lightbulb, Loader2 } from 'lucide-react';
 import Header from './components/Header';
 import LensCard from './components/LensCard';
 import RepositoryButton from './components/RepositoryButton';
@@ -205,19 +206,21 @@ const App: React.FC = () => {
           <button
             type="button"
             onClick={handleStudentConsoleClick}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 ${
               consoleMode === 'student' ? 'bg-amber-300 border border-amber-400 text-black shadow' : 'text-black hover:text-black'
             }`}
           >
+            <GraduationCap className="w-4 h-4" strokeWidth={2} />
             Student Console
           </button>
           <button
             type="button"
             onClick={handleTeacherConsoleClick}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 ${
               consoleMode === 'teacher' ? 'bg-amber-300 border border-amber-400 text-black shadow' : 'text-black hover:text-black'
             }`}
           >
+            <BookOpenCheck className="w-4 h-4" strokeWidth={2} />
             Teacher Console
           </button>
         </div>
@@ -277,7 +280,10 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 space-y-6">
             <div className="surface-card p-6">
-              <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Bacaan Anda</label>
+              <label className="flex items-center gap-1.5 text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">
+                <FileText className="w-4 h-4" strokeWidth={2} />
+                Bacaan Anda
+              </label>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -295,17 +301,12 @@ const App: React.FC = () => {
               >
                 {loading ? (
                   <>
-                    <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                    <Loader2 className="animate-spin h-5 w-5 text-white" />
                     Sedang Meneroka...
                   </>
                 ) : (
                   <>
-                    <svg className="w-5 h-5 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
+                    <Lightbulb className="w-5 h-5 flex-shrink-0 ml-2" strokeWidth={2} />
                     <span className="text-center pr-7">Teroka Idea Baharu Dengan Menggunakan EMPAT Lensa</span>
                   </>
                 )}
@@ -313,7 +314,10 @@ const App: React.FC = () => {
 
               {result && (
                 <div className="mt-4 p-4 surface-soft space-y-3">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">title</label>
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    <Bookmark className="w-3.5 h-3.5" strokeWidth={2} />
+                    title
+                  </label>
                   <input
                     type="text"
                     value={repoTitle}
@@ -335,9 +339,7 @@ const App: React.FC = () => {
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm flex items-center gap-2">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
+                <AlertCircle className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
                 {error}
               </div>
             )}
@@ -346,10 +348,8 @@ const App: React.FC = () => {
           <div className="lg:col-span-2 space-y-6">
             {!result && !loading && (
               <div className="h-[600px] empty-state rounded-3xl flex flex-col items-center justify-center text-slate-400 p-12 text-center">
-                <div className="bg-slate-100 p-4 rounded-full mb-4">
-                  <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
+                <div className="bg-slate-100 p-5 rounded-full mb-5">
+                  <Sparkles className="w-12 h-12 text-emerald-400" strokeWidth={1.5} />
                 </div>
                 <h2 className="text-xl font-semibold text-slate-600">Sedia Untuk Menjana Idea</h2>
                 <p className="mt-2 max-w-sm">Tampal teks anda (Bahasa Melayu atau Inggeris) di kiri dan klik butang untuk melihat bagaimana lensa berbeza boleh membantu anda menulis perenggan yang lebih mantap!</p>
@@ -375,17 +375,13 @@ const App: React.FC = () => {
               <div className="space-y-8 result-stack-enter">
                 <div className="hero-gradient text-white rounded-3xl p-8 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-10">
-                    <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
-                    </svg>
+                    <Sparkles className="w-48 h-48" strokeWidth={0.75} />
                   </div>
                   <div className="relative z-10">
                     <h2 className="text-2xl font-extrabold mb-3">Teroka Perspektif Menulis</h2>
                     <p className="text-emerald-100 leading-relaxed mb-4">{result.advice}</p>
                     <div className="flex items-center gap-2 text-sm font-medium bg-white/10 w-fit px-3 py-1.5 rounded-full border border-white/20">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1a1 1 0 112 0v1a1 1 0 11-2 0zM13 16v-1a1 1 0 112 0v1a1 1 0 11-2 0zM14.95 15.05a1 1 0 010-1.414l.707-.707a1 1 0 011.414 1.414l-.707.707a1 1 0 01-1.414 0zM6.464 14.95a1 1 0 01-1.414 0l-.707-.707a1 1 0 011.414-1.414l.707.707a1 1 0 010 1.414z" />
-                      </svg>
+                      <Lightbulb className="w-4 h-4" strokeWidth={2} />
                       Tip: Gunakan "Ayat Topik" di bawah untuk memulakan perenggan anda sendiri.
                     </div>
                   </div>

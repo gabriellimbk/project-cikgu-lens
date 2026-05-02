@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+import { RefreshCw, Users, Scale, Globe, Quote, ListChecks } from 'lucide-react';
 import { LensOutput } from '../types';
 
 interface LensCardProps {
@@ -26,10 +27,11 @@ const LensCard: React.FC<LensCardProps> = ({ data, editable = false, onChange })
   const getLensInfo = (lens: string) => {
     switch (lens) {
       case 'Change':
-      case 'Perubahan': 
+      case 'Perubahan':
         return {
           color: 'border-amber-300 bg-amber-50 text-amber-900',
           badge: 'bg-amber-100 text-amber-900',
+          icon: <RefreshCw className="w-4 h-4" strokeWidth={2.5} />,
           desc: 'Melihat perkembangan, punca perubahan, dan kesan jangka masa terhadap persekitaran atau individu.'
         };
       case 'Relationship':
@@ -37,6 +39,7 @@ const LensCard: React.FC<LensCardProps> = ({ data, editable = false, onChange })
         return {
           color: 'border-violet-300 bg-violet-50 text-violet-900',
           badge: 'bg-violet-100 text-violet-900',
+          icon: <Users className="w-4 h-4" strokeWidth={2.5} />,
           desc: 'Meneroka interaksi, emosi, dan rangkaian antara manusia, masyarakat, dan persekitaran.'
         };
       case 'Choices':
@@ -44,6 +47,7 @@ const LensCard: React.FC<LensCardProps> = ({ data, editable = false, onChange })
         return {
           color: 'border-emerald-300 bg-emerald-50 text-emerald-900',
           badge: 'bg-emerald-100 text-emerald-900',
+          icon: <Scale className="w-4 h-4" strokeWidth={2.5} />,
           desc: 'Menganalisis keputusan, dilema, tanggungjawab moral, serta implikasi jangka pendek dan panjang.'
         };
       case 'Culture':
@@ -51,12 +55,14 @@ const LensCard: React.FC<LensCardProps> = ({ data, editable = false, onChange })
         return {
           color: 'border-sky-300 bg-sky-50 text-sky-900',
           badge: 'bg-sky-100 text-sky-900',
+          icon: <Globe className="w-4 h-4" strokeWidth={2.5} />,
           desc: 'Meneliti cara budaya, nilai, bahasa, adat, dan latar masyarakat membentuk identiti serta sikap.'
         };
-      default: 
+      default:
         return {
           color: 'border-slate-500 bg-slate-50 text-slate-700',
           badge: 'bg-slate-100 text-slate-800',
+          icon: null,
           desc: 'Perspektif analisis teks.'
         };
     }
@@ -87,7 +93,8 @@ const LensCard: React.FC<LensCardProps> = ({ data, editable = false, onChange })
     <div className={`rounded-xl border-l-4 p-6 shadow-sm transition-all hover:shadow-md ${info.color}`}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
         <div className="flex items-center gap-3">
-          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${info.badge}`}>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${info.badge}`}>
+            {info.icon}
             Lensa: {shownData.lens}
           </span>
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
@@ -145,7 +152,10 @@ const LensCard: React.FC<LensCardProps> = ({ data, editable = false, onChange })
       </div>
 
       <div className="mb-6">
-        <h3 className="text-sm font-semibold text-slate-700 uppercase mb-2">Ayat Topik</h3>
+        <h3 className="text-sm font-semibold text-slate-700 uppercase mb-2 flex items-center gap-1.5">
+          <Quote className="w-3.5 h-3.5" />
+          Ayat Topik
+        </h3>
         {isEditing ? (
           <textarea
             value={draft.topicSentence}
@@ -160,7 +170,10 @@ const LensCard: React.FC<LensCardProps> = ({ data, editable = false, onChange })
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-slate-700 uppercase mb-3">Sokongan & Bukti Konkrit</h3>
+        <h3 className="text-sm font-semibold text-slate-700 uppercase mb-3 flex items-center gap-1.5">
+          <ListChecks className="w-3.5 h-3.5" />
+          Sokongan & Bukti Konkrit
+        </h3>
         <ul className="space-y-4">
           {shownData.supports.map((item, idx) => (
             <li key={idx} className="flex gap-3 items-start">
