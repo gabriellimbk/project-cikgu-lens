@@ -1,6 +1,7 @@
 ﻿import { encode, getSupabaseConfig, supabaseGet, supabaseInsert } from './supabase.js';
 
 const SIMILARITY_THRESHOLD = 0.99;
+const REQUIRED_LENS_COUNT = 4;
 
 type Evidence = {
   point: string;
@@ -37,7 +38,7 @@ const responseSchema = {
     advice: { type: 'string' },
     lenses: {
       type: 'array',
-      minItems: 3,
+      minItems: REQUIRED_LENS_COUNT,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -66,7 +67,7 @@ const responseSchema = {
   required: ['title', 'advice', 'lenses']
 };
 
-const buildPrompt = (text: string) => `You are an encouraging writing coach for students. Analyze the provided text using THREE specific lenses to help students build better paragraphs and expand their perspective.
+const buildPrompt = (text: string) => `You are an encouraging writing coach for students. Analyze the provided text using FOUR specific lenses to help students build better paragraphs and expand their perspective.
 
 TEXT TO ANALYZE (This text can be in English, Malay, or any other language):
 ${text}
@@ -77,9 +78,10 @@ LENS DEFINITIONS TO FOLLOW:
 1. Hubungan (Relationship): Focus on emotions, human interactions, and links between individuals, society, or the environment. Guide students to think about: Who is involved? How do feelings/intentions affect actions? What is the impact of this connection?
 2. Perubahan (Change): Focus on developments in life and the environment. Identify causes of change and the scale (from individual to global). Consider timeframes (kadar, jangka masa, kesinambungan). Guide students to think about: What causes this change? Who is affected? How long does the impact last?
 3. Pilihan (Choices): Focus on daily decisions, dilemmas, and their short/long-term implications, including moral responsibility. Guide students to think about: What choices are available? Who/what is affected? What values or principles guide the choice?
+4. Budaya (Culture): Focus on how culture shapes identity and attitudes through language, values, traditions, beliefs, customs, lifestyle, arts, sports, food, fashion, ethics, and community practices. Guide students to think about: Why is it important to understand culture? How do values and cultural background influence attitudes? How does culture shape identity or jati diri? How can people learn, appreciate, and strengthen cross-cultural understanding?
 
 REQUIREMENTS FOR THE STUDENT OUTPUT:
-- For EACH lens (Hubungan, Perubahan, Pilihan):
+- For EACH lens (Hubungan, Perubahan, Pilihan, Budaya):
    - Identify the specific segment (e.g., "Perenggan 1") used.
    - Craft one clear "Ayat Topik" (Topic Sentence) that starts a high-quality paragraph based on that lens.
    - Provide 3 supporting points. Each point must have a "Penerangan" (Supporting statement) and "Bukti" (Concrete evidence from the text).
@@ -131,6 +133,10 @@ const findSimilarCachedResult = (cache: CachedAnalysisEntry[], normalizedInput: 
       continue;
     }
 
+    if (!Array.isArray(entry.result.lenses) || entry.result.lenses.length < REQUIRED_LENS_COUNT) {
+      continue;
+    }
+
     if (entry.normalizedText === normalizedInput) {
       return entry.result;
     }
@@ -179,7 +185,7 @@ const loadExactGeneratedResult = async (normalizedInput: string): Promise<Genera
   const supabaseEnabled = Boolean(getSupabaseConfig());
   if (!supabaseEnabled) {
     const local = generatedCache.find((item) => item.normalizedText === normalizedInput);
-    return local?.result ?? null;
+    return Array.isArray(local?.result?.lenses) && local.result.lenses.length >= REQUIRED_LENS_COUNT ? local.result : null;
   }
 
   const rows = await supabaseGet(
@@ -190,7 +196,8 @@ const loadExactGeneratedResult = async (normalizedInput: string): Promise<Genera
     return null;
   }
 
-  return rows[0]?.result ? (rows[0].result as GenerationResult) : null;
+  const result = rows[0]?.result ? (rows[0].result as GenerationResult) : null;
+  return Array.isArray(result?.lenses) && result.lenses.length >= REQUIRED_LENS_COUNT ? result : null;
 };
 
 const storeGeneratedResult = async (text: string, normalizedText: string, result: GenerationResult): Promise<void> => {

@@ -5,7 +5,7 @@ export interface Evidence {
 }
 
 export interface LensOutput {
-  lens: 'Change' | 'Relationship' | 'Choices';
+  lens: string;
   topicSentence: string;
   supports: Evidence[];
   paragraphSource: string;

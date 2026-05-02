@@ -5,6 +5,7 @@ const ROOT = process.cwd();
 const ENV_PATH = path.join(ROOT, ".env.local");
 const TEXTS_PATH = path.join(ROOT, "2026 Text.json");
 const OUTPUT_PATH = path.join(ROOT, "components", "repositoryStorage.ts");
+const REQUIRED_LENS_COUNT = 4;
 
 const responseSchema = {
   type: "object",
@@ -14,7 +15,7 @@ const responseSchema = {
     advice: { type: "string" },
     lenses: {
       type: "array",
-      minItems: 3,
+      minItems: REQUIRED_LENS_COUNT,
       items: {
         type: "object",
         additionalProperties: false,
@@ -43,7 +44,7 @@ const responseSchema = {
   required: ["title", "advice", "lenses"]
 };
 
-const buildPrompt = (text) => `You are an encouraging writing coach for students. Analyze the provided text using THREE specific lenses to help students build better paragraphs and expand their perspective.
+const buildPrompt = (text) => `You are an encouraging writing coach for students. Analyze the provided text using FOUR specific lenses to help students build better paragraphs and expand their perspective.
 
 TEXT TO ANALYZE (This text can be in English, Malay, or any other language):
 ${text}
@@ -54,9 +55,10 @@ LENS DEFINITIONS TO FOLLOW:
 1. Hubungan (Relationship): Focus on emotions, human interactions, and links between individuals, society, or the environment. Guide students to think about: Who is involved? How do feelings/intentions affect actions? What is the impact of this connection?
 2. Perubahan (Change): Focus on developments in life and the environment. Identify causes of change and the scale (from individual to global). Consider timeframes (kadar, jangka masa, kesinambungan). Guide students to think about: What causes this change? Who is affected? How long does the impact last?
 3. Pilihan (Choices): Focus on daily decisions, dilemmas, and their short/long-term implications, including moral responsibility. Guide students to think about: What choices are available? Who/what is affected? What values or principles guide the choice?
+4. Budaya (Culture): Focus on how culture shapes identity and attitudes through language, values, traditions, beliefs, customs, lifestyle, arts, sports, food, fashion, ethics, and community practices. Guide students to think about: Why is it important to understand culture? How do values and cultural background influence attitudes? How does culture shape identity or jati diri? How can people learn, appreciate, and strengthen cross-cultural understanding?
 
 REQUIREMENTS FOR THE STUDENT OUTPUT:
-- For EACH lens (Hubungan, Perubahan, Pilihan):
+- For EACH lens (Hubungan, Perubahan, Pilihan, Budaya):
    - Identify the specific segment (e.g., "Perenggan 1") used.
    - Craft one clear "Ayat Topik" (Topic Sentence) that starts a high-quality paragraph based on that lens.
    - Provide 3 supporting points. Each point must have a "Penerangan" (Supporting statement) and "Bukti" (Concrete evidence from the text).
@@ -108,6 +110,7 @@ const normalizeLens = (lens) => {
   if (lens === "Relationship") return "Hubungan";
   if (lens === "Change") return "Perubahan";
   if (lens === "Choices") return "Pilihan";
+  if (lens === "Culture") return "Budaya";
   return lens;
 };
 
