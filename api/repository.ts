@@ -102,10 +102,6 @@ export default async function handler(req: any, res: any) {
     }
 
     if (req.method === 'POST') {
-      if (!ensureTeacherAccess(req, res)) {
-        return;
-      }
-
       const payload = readPayload(req.body);
       const id = typeof payload.id === 'string' ? payload.id.trim() : '';
       const text = typeof payload.text === 'string' ? payload.text.trim() : '';
