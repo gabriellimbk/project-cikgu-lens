@@ -4,6 +4,8 @@ import path from "node:path";
 const ROOT = process.cwd();
 const ENV_PATH = path.join(ROOT, ".env.local");
 const REQUIRED_LENS = "Budaya";
+const REPOSITORY_TABLE = "MTL_CIKGU_LENS";
+const LEGACY_REPOSITORY_TABLE = "repository_entries";
 
 const parseEnv = (raw) => {
   const env = {};
@@ -146,9 +148,9 @@ const generateBudayaLens = async (openAiKey, text) => {
   return JSON.parse(extractOutputText(payload));
 };
 
-const fetchRepositoryEntries = async (supabaseUrl, supabaseKey) => {
+const fetchRepositoryEntriesFromTable = async (supabaseUrl, supabaseKey, table) => {
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/repository_entries?select=id,text,result&order=created_at.desc&limit=1000`,
+    `${supabaseUrl}/rest/v1/${table}?select=id,text,result&order=created_at.desc&limit=1000`,
     { headers: supabaseHeaders(supabaseKey) }
   );
 
@@ -159,8 +161,17 @@ const fetchRepositoryEntries = async (supabaseUrl, supabaseKey) => {
   return response.json();
 };
 
-const updateRepositoryResult = async (supabaseUrl, supabaseKey, id, result) => {
-  const response = await fetch(`${supabaseUrl}/rest/v1/repository_entries?id=eq.${encodeURIComponent(id)}`, {
+const fetchRepositoryEntries = async (supabaseUrl, supabaseKey) => {
+  try {
+    return await fetchRepositoryEntriesFromTable(supabaseUrl, supabaseKey, REPOSITORY_TABLE);
+  } catch (error) {
+    console.warn(`Repository fetch from ${REPOSITORY_TABLE} failed; falling back to ${LEGACY_REPOSITORY_TABLE}`);
+    return fetchRepositoryEntriesFromTable(supabaseUrl, supabaseKey, LEGACY_REPOSITORY_TABLE);
+  }
+};
+
+const updateRepositoryResultInTable = async (supabaseUrl, supabaseKey, table, id, result) => {
+  const response = await fetch(`${supabaseUrl}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: {
       ...supabaseHeaders(supabaseKey, true),
@@ -171,6 +182,15 @@ const updateRepositoryResult = async (supabaseUrl, supabaseKey, id, result) => {
 
   if (!response.ok) {
     throw new Error(`Supabase update failed for ${id} (${response.status}): ${await readError(response)}`);
+  }
+};
+
+const updateRepositoryResult = async (supabaseUrl, supabaseKey, id, result) => {
+  try {
+    await updateRepositoryResultInTable(supabaseUrl, supabaseKey, REPOSITORY_TABLE, id, result);
+  } catch (error) {
+    console.warn(`Repository update in ${REPOSITORY_TABLE} failed; falling back to ${LEGACY_REPOSITORY_TABLE}`);
+    await updateRepositoryResultInTable(supabaseUrl, supabaseKey, LEGACY_REPOSITORY_TABLE, id, result);
   }
 };
 

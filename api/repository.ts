@@ -9,6 +9,8 @@ type RepositoryEntry = {
 };
 
 const inMemoryRepository: RepositoryEntry[] = [];
+const REPOSITORY_TABLE = 'MTL_CIKGU_LENS';
+const LEGACY_REPOSITORY_TABLE = 'repository_entries';
 
 const readPayload = (body: unknown): Record<string, unknown> => {
   if (!body) return {};
@@ -38,7 +40,14 @@ const getRepository = async (): Promise<RepositoryEntry[]> => {
     return inMemoryRepository;
   }
 
-  const rows = await supabaseGet('repository_entries?select=id,text,result,created_at&order=created_at.desc');
+  try {
+    const rows = await supabaseGet(`${REPOSITORY_TABLE}?select=id,text,result,created_at&order=created_at.desc`);
+    return (rows ?? []) as RepositoryEntry[];
+  } catch (error) {
+    console.warn(`Repository fetch from ${REPOSITORY_TABLE} failed; falling back to ${LEGACY_REPOSITORY_TABLE}`, error);
+  }
+
+  const rows = await supabaseGet(`${LEGACY_REPOSITORY_TABLE}?select=id,text,result,created_at&order=created_at.desc`);
   return (rows ?? []) as RepositoryEntry[];
 };
 
@@ -54,16 +63,19 @@ const saveRepositoryEntry = async (entry: RepositoryEntry): Promise<void> => {
     return;
   }
 
-  await supabaseInsert(
-    'repository_entries',
-    {
-      id: entry.id,
-      text: entry.text,
-      result: entry.result,
-      created_at: new Date().toISOString()
-    },
-    'id'
-  );
+  const payload = {
+    id: entry.id,
+    text: entry.text,
+    result: entry.result,
+    created_at: new Date().toISOString()
+  };
+
+  try {
+    await supabaseInsert(REPOSITORY_TABLE, payload, 'id');
+  } catch (error) {
+    console.warn(`Repository save to ${REPOSITORY_TABLE} failed; falling back to ${LEGACY_REPOSITORY_TABLE}`, error);
+    await supabaseInsert(LEGACY_REPOSITORY_TABLE, payload, 'id');
+  }
 };
 
 const deleteRepositoryEntry = async (entryId: string): Promise<void> => {
@@ -76,7 +88,12 @@ const deleteRepositoryEntry = async (entryId: string): Promise<void> => {
     return;
   }
 
-  await supabaseDeleteById('repository_entries', entryId);
+  try {
+    await supabaseDeleteById(REPOSITORY_TABLE, entryId);
+  } catch (error) {
+    console.warn(`Repository delete from ${REPOSITORY_TABLE} failed; falling back to ${LEGACY_REPOSITORY_TABLE}`, error);
+    await supabaseDeleteById(LEGACY_REPOSITORY_TABLE, entryId);
+  }
 };
 
 const ensureTeacherAccess = (req: any, res: any): boolean => {
