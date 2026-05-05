@@ -28,3 +28,25 @@ alter index if exists public.repository_entries_created_at_idx
 
 create index if not exists mtl_cikgu_lens_created_at_idx
   on public."MTL_CIKGU_LENS" (created_at desc);
+
+-- Optional: copy generated analyses into the app repository table.
+-- The repository UI displays id as the visible title, so use the generated
+-- analysis title plus a short UUID suffix instead of exposing raw UUIDs.
+
+insert into public."MTL_CIKGU_LENS" (id, text, result, created_at)
+select
+  concat(
+    coalesce(nullif(trim(g.result->>'title'), ''), 'Generated analysis'),
+    ' - ',
+    left(g.id::text, 8)
+  ) as id,
+  g.text,
+  g.result,
+  g.created_at
+from public.generated_analyses g
+where not exists (
+  select 1
+  from public."MTL_CIKGU_LENS" r
+  where r.text = g.text
+)
+on conflict (id) do nothing;
