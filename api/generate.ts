@@ -32,6 +32,12 @@ type CachedAnalysisEntry = {
 
 const generatedCache: CachedAnalysisEntry[] = [];
 
+const isValidGenerationResult = (result: GenerationResult | null | undefined): result is GenerationResult =>
+  Boolean(result) &&
+  Array.isArray(result.lenses) &&
+  result.lenses.length === REQUIRED_LENS_COUNT &&
+  result.lenses.every((lens) => Array.isArray(lens?.supports) && lens.supports.length === 3);
+
 const responseSchema = {
   type: 'object',
   additionalProperties: false,
@@ -41,6 +47,7 @@ const responseSchema = {
     lenses: {
       type: 'array',
       minItems: REQUIRED_LENS_COUNT,
+      maxItems: REQUIRED_LENS_COUNT,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -51,6 +58,7 @@ const responseSchema = {
           supports: {
             type: 'array',
             minItems: 3,
+            maxItems: 3,
             items: {
               type: 'object',
               additionalProperties: false,
@@ -88,6 +96,7 @@ REQUIREMENTS FOR THE STUDENT OUTPUT:
    - Craft one clear "Ayat Topik" (Topic Sentence) that starts a high-quality paragraph based on that lens.
    - Provide 3 supporting points. Each point must have a "Penerangan" (Supporting statement) and "Bukti" (Concrete evidence from the text).
 - Provide a piece of "Nasihat Penulisan" (Writing Advice) in Bahasa Melayu.
+- Keep the response concise. Return exactly 4 lenses, exactly 3 supporting points per lens, and no extra sections.
 
 CRITICAL: Regardless of the language of the input text, ALL generated output MUST be strictly in Malaysian Malay (Bahasa Melayu Malaysia).`;
 
@@ -137,7 +146,7 @@ const findSimilarCachedResult = (cache: CachedAnalysisEntry[], normalizedInput: 
       continue;
     }
 
-    if (!Array.isArray(entry.result.lenses) || entry.result.lenses.length < REQUIRED_LENS_COUNT) {
+    if (!isValidGenerationResult(entry.result)) {
       continue;
     }
 
@@ -189,7 +198,7 @@ const loadExactGeneratedResult = async (normalizedInput: string): Promise<Genera
   const supabaseEnabled = Boolean(getSupabaseConfig());
   if (!supabaseEnabled) {
     const local = generatedCache.find((item) => item.normalizedText === normalizedInput);
-    return Array.isArray(local?.result?.lenses) && local.result.lenses.length >= REQUIRED_LENS_COUNT ? local.result : null;
+    return isValidGenerationResult(local?.result) ? local.result : null;
   }
 
   const normalizedTextHash = hashNormalizedText(normalizedInput);
@@ -211,7 +220,7 @@ const loadExactGeneratedResult = async (normalizedInput: string): Promise<Genera
   }
 
   const result = rows[0]?.result ? (rows[0].result as GenerationResult) : null;
-  return Array.isArray(result?.lenses) && result.lenses.length >= REQUIRED_LENS_COUNT ? result : null;
+  return isValidGenerationResult(result) ? result : null;
 };
 
 const storeGeneratedResult = async (text: string, normalizedText: string, result: GenerationResult): Promise<void> => {
@@ -291,6 +300,63 @@ const readPayload = (body: unknown): Record<string, unknown> => {
   return {};
 };
 
+const parseGenerationResult = (outputText: string): GenerationResult => {
+  try {
+    const result = JSON.parse(outputText) as GenerationResult;
+    if (!isValidGenerationResult(result)) {
+      throw new Error('Invalid generation result shape');
+    }
+
+    return result;
+  } catch {
+    throw new Error('Jawapan yang dijana tidak lengkap. Sila cuba sekali lagi.');
+  }
+};
+
+const requestGenerationResult = async (apiKey: string, text: string): Promise<GenerationResult> => {
+  const openAiResponse = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      input: buildPrompt(text),
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'lens_analysis',
+          strict: true,
+          schema: responseSchema
+        }
+      }
+    })
+  });
+
+  const openAiData = await openAiResponse.json();
+  if (!openAiResponse.ok) {
+    const message = openAiData?.error?.message || 'Gagal menjana idea. Sila cuba lagi.';
+    throw new Error(message);
+  }
+
+  const outputText = extractOutputText(openAiData);
+  return parseGenerationResult(outputText);
+};
+
+const generateResultWithRetry = async (apiKey: string, text: string): Promise<GenerationResult> => {
+  try {
+    return await requestGenerationResult(apiKey, text);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Jawapan yang dijana tidak lengkap. Sila cuba sekali lagi.') {
+      console.warn('Generated JSON was invalid; retrying once.', error);
+      return requestGenerationResult(apiKey, text);
+    }
+
+    throw error;
+  }
+};
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Kaedah tidak dibenarkan.' });
@@ -329,35 +395,7 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const openAiResponse = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        input: buildPrompt(text),
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'lens_analysis',
-            strict: true,
-            schema: responseSchema
-          }
-        }
-      })
-    });
-
-    const openAiData = await openAiResponse.json();
-    if (!openAiResponse.ok) {
-      const message = openAiData?.error?.message || 'Gagal menjana idea. Sila cuba lagi.';
-      res.status(openAiResponse.status).json({ error: message });
-      return;
-    }
-
-    const outputText = extractOutputText(openAiData);
-    const result = JSON.parse(outputText) as GenerationResult;
+    const result = await generateResultWithRetry(apiKey, text);
 
     await storeGeneratedResult(text, normalizedInput, result);
 
