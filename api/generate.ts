@@ -1,5 +1,7 @@
 ﻿import { encode, getSupabaseConfig, supabaseGet, supabaseInsert } from './supabase.js';
 
+import { createHash } from 'node:crypto';
+
 const SIMILARITY_THRESHOLD = 0.99;
 const REQUIRED_LENS_COUNT = 4;
 
@@ -95,6 +97,8 @@ const normalizeText = (text: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const hashNormalizedText = (text: string): string => createHash('sha256').update(text).digest('hex');
+
 const levenshteinDistance = (a: string, b: string): number => {
   if (a === b) return 0;
   if (a.length === 0) return b.length;
@@ -188,9 +192,19 @@ const loadExactGeneratedResult = async (normalizedInput: string): Promise<Genera
     return Array.isArray(local?.result?.lenses) && local.result.lenses.length >= REQUIRED_LENS_COUNT ? local.result : null;
   }
 
-  const rows = await supabaseGet(
-    `generated_analyses?select=result&normalized_text=eq.${encode(normalizedInput)}&order=created_at.desc&limit=1`
-  );
+  const normalizedTextHash = hashNormalizedText(normalizedInput);
+  let rows: any[] | null;
+
+  try {
+    rows = await supabaseGet(
+      `generated_analyses?select=result&normalized_text_hash=eq.${encode(normalizedTextHash)}&normalized_text=eq.${encode(normalizedInput)}&order=created_at.desc&limit=1`
+    );
+  } catch (error) {
+    console.warn('Hashed generated analysis cache lookup failed', error);
+    rows = await supabaseGet(
+      `generated_analyses?select=result&normalized_text=eq.${encode(normalizedInput)}&order=created_at.desc&limit=1`
+    );
+  }
 
   if (!rows || rows.length === 0) {
     return null;
@@ -204,6 +218,7 @@ const storeGeneratedResult = async (text: string, normalizedText: string, result
   const payload = {
     text,
     normalized_text: normalizedText,
+    normalized_text_hash: hashNormalizedText(normalizedText),
     result,
     created_at: new Date().toISOString()
   };
@@ -219,7 +234,23 @@ const storeGeneratedResult = async (text: string, normalizedText: string, result
     return;
   }
 
-  await supabaseInsert('generated_analyses', payload);
+  try {
+    await supabaseInsert('generated_analyses', payload);
+  } catch (error) {
+    console.warn('Generated analysis cache write failed', error);
+    const legacyPayload = {
+      text,
+      normalized_text: normalizedText,
+      result,
+      created_at: payload.created_at
+    };
+
+    try {
+      await supabaseInsert('generated_analyses', legacyPayload);
+    } catch (legacyError) {
+      console.warn('Legacy generated analysis cache write failed', legacyError);
+    }
+  }
 };
 
 const extractOutputText = (data: any): string => {

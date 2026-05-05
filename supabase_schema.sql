@@ -6,12 +6,13 @@ create table if not exists public.generated_analyses (
   id uuid primary key default gen_random_uuid(),
   text text not null,
   normalized_text text not null,
+  normalized_text_hash text not null,
   result jsonb not null,
   created_at timestamptz not null default now()
 );
 
 create index if not exists generated_analyses_normalized_text_idx
-  on public.generated_analyses (normalized_text);
+  on public.generated_analyses (normalized_text_hash);
 
 create index if not exists generated_analyses_created_at_idx
   on public.generated_analyses (created_at desc);
