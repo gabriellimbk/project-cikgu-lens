@@ -1,5 +1,5 @@
 ﻿import { getConfiguredTeacherPassword, isTeacherRequestAuthorized } from './teacherAuth.js';
-import { getSupabaseConfig, supabaseDeleteById, supabaseGet, supabaseInsert } from './supabase.js';
+import { getSupabaseConfig, supabaseDeleteById, supabaseGet, supabaseInsert, supabaseUpdateById } from './supabase.js';
 
 type RepositoryEntry = {
   id: string;
@@ -78,6 +78,32 @@ const saveRepositoryEntry = async (entry: RepositoryEntry): Promise<void> => {
   }
 };
 
+const updateRepositoryEntry = async (entry: RepositoryEntry): Promise<void> => {
+  const payload = {
+    text: entry.text,
+    result: entry.result
+  };
+
+  const supabaseEnabled = Boolean(getSupabaseConfig());
+  if (!supabaseEnabled) {
+    const existingIndex = inMemoryRepository.findIndex((item) => item.id === entry.id);
+    if (existingIndex >= 0) {
+      inMemoryRepository[existingIndex] = {
+        ...inMemoryRepository[existingIndex],
+        ...payload
+      };
+    }
+    return;
+  }
+
+  try {
+    await supabaseUpdateById(REPOSITORY_TABLE, entry.id, payload);
+  } catch (error) {
+    console.warn(`Repository update in ${REPOSITORY_TABLE} failed; falling back to ${LEGACY_REPOSITORY_TABLE}`, error);
+    await supabaseUpdateById(LEGACY_REPOSITORY_TABLE, entry.id, payload);
+  }
+};
+
 const deleteRepositoryEntry = async (entryId: string): Promise<void> => {
   const supabaseEnabled = Boolean(getSupabaseConfig());
   if (!supabaseEnabled) {
@@ -130,6 +156,26 @@ export default async function handler(req: any, res: any) {
       }
 
       await saveRepositoryEntry({ id, text, result });
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    if (req.method === 'PUT' || req.method === 'PATCH') {
+      if (!ensureTeacherAccess(req, res)) {
+        return;
+      }
+
+      const payload = readPayload(req.body);
+      const id = typeof payload.id === 'string' ? payload.id.trim() : '';
+      const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+      const result = payload.result;
+
+      if (!id || !text || !result || typeof result !== 'object') {
+        res.status(400).json({ error: 'Data repository tidak lengkap untuk dikemaskini.' });
+        return;
+      }
+
+      await updateRepositoryEntry({ id, text, result });
       res.status(200).json({ ok: true });
       return;
     }

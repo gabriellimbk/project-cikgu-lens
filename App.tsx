@@ -9,7 +9,8 @@ import { generateLensAnalysis } from './openaiService';
 import {
   deleteRepositoryEntry as deleteRepositoryEntryApi,
   fetchRepositoryEntries,
-  saveRepositoryEntry as saveRepositoryEntryApi
+  saveRepositoryEntry as saveRepositoryEntryApi,
+  updateRepositoryEntry as updateRepositoryEntryApi
 } from './repositoryService';
 import { verifyTeacherPassword } from './teacherAuthService';
 import { GenerationResult, RepositoryEntry } from './types';
@@ -25,6 +26,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [repoOpen, setRepoOpen] = useState(false);
   const [repositoryData, setRepositoryData] = useState<RepositoryEntry[]>(repositoryEntries);
+  const [selectedRepositoryEntryId, setSelectedRepositoryEntryId] = useState<string | null>(null);
   const [consoleMode, setConsoleMode] = useState<ConsoleMode>('student');
   const [repoTitle, setRepoTitle] = useState('');
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
@@ -82,6 +84,7 @@ const App: React.FC = () => {
   const handleSelectRepoEntry = (entry: RepositoryEntry) => {
     setText(entry.text);
     setResult(entry.result);
+    setSelectedRepositoryEntryId(entry.id);
     setRepoOpen(false);
     setError(null);
     setSaveNotice(null);
@@ -93,6 +96,7 @@ const App: React.FC = () => {
     setLoading(true);
     setError(null);
     setSaveNotice(null);
+    setSelectedRepositoryEntryId(null);
 
     try {
       const data = await generateLensAnalysis(text);
@@ -129,6 +133,7 @@ const App: React.FC = () => {
     try {
       await saveRepositoryEntryApi(newEntry);
       setRepositoryData((prev) => [newEntry, ...prev]);
+      setSelectedRepositoryEntryId(finalTitle);
       setRepoTitle('');
       setError(null);
       setSaveNotice(`Disimpan ke repository sebagai: ${finalTitle}`);
@@ -143,6 +148,7 @@ const App: React.FC = () => {
     try {
       await deleteRepositoryEntryApi(entryId);
       setRepositoryData((prev) => prev.filter((entry) => entry.id !== entryId));
+      setSelectedRepositoryEntryId((current) => (current === entryId ? null : current));
       setSaveNotice(`Rekod dipadam: ${entryId}`);
       setError(null);
     } catch (err: any) {
@@ -150,16 +156,39 @@ const App: React.FC = () => {
     }
   }, [isTeacherMode]);
 
-  const handleUpdateLens = useCallback((lensIndex: number, updatedLens: GenerationResult['lenses'][number]) => {
-    setResult((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        lenses: current.lenses.map((lens, index) => (index === lensIndex ? updatedLens : lens))
-      };
-    });
+  const handleUpdateLens = useCallback(async (lensIndex: number, updatedLens: GenerationResult['lenses'][number]) => {
+    if (!result) return;
+
+    const updatedResult: GenerationResult = {
+      ...result,
+      lenses: result.lenses.map((lens, index) => (index === lensIndex ? updatedLens : lens))
+    };
+
+    setResult(updatedResult);
     setSaveNotice(null);
-  }, []);
+
+    if (!isTeacherMode || !selectedRepositoryEntryId) {
+      return;
+    }
+
+    const selectedEntry = repositoryData.find((entry) => entry.id === selectedRepositoryEntryId);
+    const updatedEntry: RepositoryEntry = {
+      id: selectedRepositoryEntryId,
+      text: selectedEntry?.text ?? text.trim(),
+      result: updatedResult
+    };
+
+    try {
+      await updateRepositoryEntryApi(updatedEntry);
+      setRepositoryData((prev) =>
+        prev.map((entry) => (entry.id === selectedRepositoryEntryId ? { ...entry, result: updatedResult } : entry))
+      );
+      setError(null);
+      setSaveNotice(`Rekod repository dikemaskini: ${selectedRepositoryEntryId}`);
+    } catch (err: any) {
+      setError(err?.message || 'Gagal mengemaskini rekod repository.');
+    }
+  }, [isTeacherMode, repositoryData, result, selectedRepositoryEntryId, text]);
 
   const closeTeacherAuthModal = useCallback(() => {
     setShowTeacherAuthModal(false);
@@ -286,7 +315,10 @@ const App: React.FC = () => {
               </label>
               <textarea
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  setSelectedRepositoryEntryId(null);
+                }}
                 placeholder="Tampal teks (Bahasa Melayu atau Inggeris) yang ingin anda teroka di sini..."
                 className="w-full h-[500px] p-4 text-sm input-surface rounded-xl transition-all resize-none outline-none leading-relaxed"
               />

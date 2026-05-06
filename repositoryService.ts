@@ -38,6 +38,22 @@ export const saveRepositoryEntry = async (entry: RepositoryEntry): Promise<void>
   }
 };
 
+export const updateRepositoryEntry = async (entry: RepositoryEntry): Promise<void> => {
+  const response = await fetch(API_URL, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(entry)
+  });
+
+  const payload = await parseJsonSafe(response);
+  if (!response.ok) {
+    const message = payload?.error || 'Gagal mengemaskini rekod repository.';
+    throw new Error(message);
+  }
+};
+
 export const deleteRepositoryEntry = async (entryId: string): Promise<void> => {
   const response = await fetch(`${API_URL}?id=${encodeURIComponent(entryId)}`, {
     method: 'DELETE'

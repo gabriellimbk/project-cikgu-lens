@@ -202,24 +202,25 @@ const loadExactGeneratedResult = async (normalizedInput: string): Promise<Genera
   }
 
   const normalizedTextHash = hashNormalizedText(normalizedInput);
-  let rows: any[] | null;
+  let rows: any[] | null = null;
 
   try {
     rows = await supabaseGet(
-      `generated_analyses?select=result&normalized_text_hash=eq.${encode(normalizedTextHash)}&normalized_text=eq.${encode(normalizedInput)}&order=created_at.desc&limit=1`
+      `generated_analyses?select=normalized_text,result&normalized_text_hash=eq.${encode(normalizedTextHash)}&order=created_at.desc&limit=10`
     );
   } catch (error) {
     console.warn('Hashed generated analysis cache lookup failed', error);
-    rows = await supabaseGet(
-      `generated_analyses?select=result&normalized_text=eq.${encode(normalizedInput)}&order=created_at.desc&limit=1`
-    );
+    const cacheSnapshot = await loadGeneratedCache();
+    const local = cacheSnapshot.find((entry) => entry.normalizedText === normalizedInput);
+    return isValidGenerationResult(local?.result) ? local.result : null;
   }
 
-  if (!rows || rows.length === 0) {
+  const exactRow = rows?.find((row) => row?.normalized_text === normalizedInput);
+  if (!exactRow) {
     return null;
   }
 
-  const result = rows[0]?.result ? (rows[0].result as GenerationResult) : null;
+  const result = exactRow.result ? (exactRow.result as GenerationResult) : null;
   return isValidGenerationResult(result) ? result : null;
 };
 

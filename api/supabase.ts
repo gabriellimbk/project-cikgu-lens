@@ -26,7 +26,18 @@ const encode = (value: string) => encodeURIComponent(value);
 
 const parseErrorText = async (response: Response): Promise<string> => {
   try {
-    const payload = await response.json();
+    const text = await response.text();
+    if (!text) {
+      return response.statusText || 'Unknown Supabase error';
+    }
+
+    let payload: any = null;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      return text;
+    }
+
     const message =
       payload?.message ||
       payload?.error_description ||
@@ -35,11 +46,7 @@ const parseErrorText = async (response: Response): Promise<string> => {
       JSON.stringify(payload);
     return String(message);
   } catch {
-    try {
-      return await response.text();
-    } catch {
-      return 'Unknown Supabase error';
-    }
+    return response.statusText || 'Unknown Supabase error';
   }
 };
 
@@ -80,6 +87,25 @@ const supabaseInsert = async (table: string, row: Record<string, unknown>, onCon
   }
 };
 
+const supabaseUpdateById = async (table: string, id: string, row: Record<string, unknown>): Promise<void> => {
+  const config = getSupabaseConfig();
+  if (!config) return;
+
+  const response = await fetch(`${config.url}/rest/v1/${table}?id=eq.${encode(id)}`, {
+    method: 'PATCH',
+    headers: {
+      ...buildHeaders(config.key, true),
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify(row)
+  });
+
+  if (!response.ok) {
+    const detail = await parseErrorText(response);
+    throw new Error(`Supabase UPDATE failed (${response.status}): ${detail}`);
+  }
+};
+
 const supabaseDeleteById = async (table: string, id: string): Promise<void> => {
   const config = getSupabaseConfig();
   if (!config) return;
@@ -98,4 +124,4 @@ const supabaseDeleteById = async (table: string, id: string): Promise<void> => {
   }
 };
 
-export { getSupabaseConfig, supabaseDeleteById, supabaseGet, supabaseInsert, encode };
+export { getSupabaseConfig, supabaseDeleteById, supabaseGet, supabaseInsert, supabaseUpdateById, encode };
