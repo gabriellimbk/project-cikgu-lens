@@ -4,6 +4,8 @@ import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import teacherAuthHandler from './api/auth/teacher';
 import repositoryHandler from './api/repository';
+import translateHandler from './api/translate';
+import categoriseHandler from './api/categorise';
 
 const GENERATED_CACHE_PATH = path.resolve(__dirname, 'storage', 'generatedAnalyses.json');
 const SIMILARITY_THRESHOLD = 0.99;
@@ -386,7 +388,9 @@ export default defineConfig(({ mode }) => {
       react(),
       openAiDevProxy(env.OPENAI_API_KEY),
       serverlessDevProxy('/api/repository', repositoryHandler),
-      serverlessDevProxy('/api/auth/teacher', teacherAuthHandler)
+      serverlessDevProxy('/api/auth/teacher', teacherAuthHandler),
+      serverlessDevProxy('/api/translate', translateHandler),
+      serverlessDevProxy('/api/categorise', categoriseHandler)
     ],
     resolve: {
       alias: {

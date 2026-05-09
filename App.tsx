@@ -1,11 +1,13 @@
-﻿import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { GraduationCap, BookOpenCheck, FileText, Bookmark, Sparkles, AlertCircle, Lightbulb, Loader2 } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { GraduationCap, BookOpenCheck, FileText, Bookmark, Sparkles, AlertCircle, Lightbulb, Loader2, Languages } from 'lucide-react';
 import Header from './components/Header';
 import LensCard from './components/LensCard';
 import RepositoryButton from './components/RepositoryButton';
 import Repository from './components/Repository';
 import repositoryEntries from './components/repositoryEntries';
 import { generateLensAnalysis } from './openaiService';
+import { translateAnalysis } from './translateService';
+import { categoriseEntries } from './categoriseService';
 import {
   deleteRepositoryEntry as deleteRepositoryEntryApi,
   fetchRepositoryEntries,
@@ -13,11 +15,22 @@ import {
   updateRepositoryEntry as updateRepositoryEntryApi
 } from './repositoryService';
 import { verifyTeacherPassword } from './teacherAuthService';
-import { GenerationResult, RepositoryEntry } from './types';
+import { AnalysisLanguage, AnalysisTranslation, GenerationResult, RepositoryEntry, RepositoryTheme } from './types';
 
 const REPOSITORY_STORAGE_KEY = 'cikgu_lens_repository_v1';
 
 type ConsoleMode = 'student' | 'teacher';
+
+const THEME_OPTIONS: { value: RepositoryTheme; labelBm: string; labelEn: string; colorClass: string }[] = [
+  { value: 'society-culture', labelBm: 'Masyarakat & Budaya', labelEn: 'Society & Culture', colorClass: 'bg-violet-100 text-violet-800 border-violet-300 hover:bg-violet-200' },
+  { value: 'economics', labelBm: 'Ekonomi', labelEn: 'Economics', colorClass: 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200' },
+  { value: 'politics', labelBm: 'Politik', labelEn: 'Politics', colorClass: 'bg-red-100 text-red-800 border-red-300 hover:bg-red-200' },
+  { value: 'arts', labelBm: 'Seni', labelEn: 'Arts', colorClass: 'bg-pink-100 text-pink-800 border-pink-300 hover:bg-pink-200' },
+  { value: 'science-technology', labelBm: 'Sains/Teknologi', labelEn: 'Science/Technology', colorClass: 'bg-sky-100 text-sky-800 border-sky-300 hover:bg-sky-200' },
+  { value: 'environment', labelBm: 'Alam Sekitar', labelEn: 'Environment', colorClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200' },
+  { value: 'others', labelBm: 'Lain-lain', labelEn: 'Others', colorClass: 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200' },
+];
+
 
 const App: React.FC = () => {
   const [text, setText] = useState(repositoryEntries[0]?.text ?? '');
@@ -29,7 +42,10 @@ const App: React.FC = () => {
   const [selectedRepositoryEntryId, setSelectedRepositoryEntryId] = useState<string | null>(null);
   const [consoleMode, setConsoleMode] = useState<ConsoleMode>('student');
   const [repoTitle, setRepoTitle] = useState('');
+  const [repoTheme, setRepoTheme] = useState<RepositoryTheme>('others');
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [language, setLanguage] = useState<AnalysisLanguage>('bm');
+  const [translating, setTranslating] = useState(false);
 
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [showTeacherAuthModal, setShowTeacherAuthModal] = useState(false);
@@ -39,43 +55,89 @@ const App: React.FC = () => {
 
   const isTeacherMode = useMemo(() => consoleMode === 'teacher', [consoleMode]);
 
-  useEffect(() => {
-    const raw = window.localStorage.getItem(REPOSITORY_STORAGE_KEY);
-    if (!raw) return;
+  // Display result is BM or EN translation depending on language toggle
+  const displayResult = useMemo((): GenerationResult | AnalysisTranslation | null => {
+    if (!result) return null;
+    if (language === 'en' && result.translationEn) return result.translationEn;
+    return result;
+  }, [result, language]);
 
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setRepositoryData(parsed as RepositoryEntry[]);
-      }
-    } catch {
-      // Ignore malformed local storage and fall back to bundled repository entries.
-    }
-  }, []);
-
+  // Persist to localStorage whenever repository state changes
   useEffect(() => {
     window.localStorage.setItem(REPOSITORY_STORAGE_KEY, JSON.stringify(repositoryData));
   }, [repositoryData]);
 
+  // Sequential init: localStorage → Supabase → categorise anything still unthemed
   useEffect(() => {
     let cancelled = false;
 
-    const loadRepositoryFromApi = async () => {
+    const init = async () => {
+      // 1. Start with bundled entries, then overlay localStorage if present
+      let entries: RepositoryEntry[] = repositoryEntries;
+      const raw = window.localStorage.getItem(REPOSITORY_STORAGE_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) entries = parsed as RepositoryEntry[];
+        } catch { /* keep bundled */ }
+      }
+
+      // 2. Try Supabase — takes final priority
       try {
         const remoteEntries = await fetchRepositoryEntries();
         if (!cancelled && Array.isArray(remoteEntries) && remoteEntries.length > 0) {
-          setRepositoryData(remoteEntries);
+          entries = remoteEntries;
         }
-      } catch {
-        // Keep local fallback if API repository is unavailable.
+      } catch { /* keep local */ }
+
+      if (cancelled) return;
+      setRepositoryData(entries);
+
+      // 3. Categorise entries that have no theme (one AI call for all of them)
+      const uncategorized = entries.filter((e) => !e.result?.theme);
+      if (uncategorized.length === 0 || cancelled) return;
+
+      try {
+        const cats = await categoriseEntries(uncategorized);
+        if (cancelled || cats.length === 0) return;
+        setRepositoryData((prev) =>
+          prev.map((entry) => {
+            const cat = cats.find((c) => c.id === entry.id);
+            if (!cat) return entry;
+            return { ...entry, result: { ...entry.result, theme: cat.theme } };
+          })
+        );
+      } catch (err) {
+        console.warn('Auto-categorisation failed:', err);
       }
     };
 
-    loadRepositoryFromApi();
+    init();
+    return () => { cancelled = true; };
+  }, []);
 
-    return () => {
-      cancelled = true;
-    };
+  const startTranslation = useCallback((target: GenerationResult, entryIdToSave?: string | null) => {
+    setTranslating(true);
+    translateAnalysis(target)
+      .then((translation) => {
+        setResult((prev) => prev ? { ...prev, translationEn: translation } : prev);
+
+        // Persist translation back to the repository entry so future loads skip AI
+        if (entryIdToSave) {
+          setRepositoryData((prevData) => {
+            const existing = prevData.find((e) => e.id === entryIdToSave);
+            if (!existing || existing.result?.translationEn) return prevData;
+            const updated: RepositoryEntry = {
+              ...existing,
+              result: { ...existing.result, translationEn: translation }
+            };
+            saveRepositoryEntryApi(updated).catch(console.warn);
+            return prevData.map((e) => (e.id === entryIdToSave ? updated : e));
+          });
+        }
+      })
+      .catch((err) => console.warn('Translation failed:', err))
+      .finally(() => setTranslating(false));
   }, []);
 
   const handleOpenRepo = () => setRepoOpen(true);
@@ -85,9 +147,16 @@ const App: React.FC = () => {
     setText(entry.text);
     setResult(entry.result);
     setSelectedRepositoryEntryId(entry.id);
+    setRepoTitle(entry.id);
+    if (entry.result?.theme) setRepoTheme(entry.result.theme);
     setRepoOpen(false);
     setError(null);
     setSaveNotice(null);
+
+    // Auto-generate EN translation if missing; pass entry ID so it's cached on completion
+    if (!entry.result?.translationEn) {
+      startTranslation(entry.result, entry.id);
+    }
   };
 
   const handleGenerate = useCallback(async () => {
@@ -97,38 +166,59 @@ const App: React.FC = () => {
     setError(null);
     setSaveNotice(null);
     setSelectedRepositoryEntryId(null);
+    setRepoTitle('');
 
     try {
       const data = await generateLensAnalysis(text);
       setResult(data);
+
+      // Generate EN translation in background
+      startTranslation(data, null);
     } catch (err: any) {
       setError(err.message || 'Ralat semasa menjana idea.');
     } finally {
       setLoading(false);
     }
-  }, [text]);
+  }, [text, startTranslation]);
+
+  // When user toggles to EN and no translation exists yet, generate on demand
+  const handleLanguageToggle = useCallback(() => {
+    const next: AnalysisLanguage = language === 'bm' ? 'en' : 'bm';
+    setLanguage(next);
+
+    if (next === 'en' && result && !result.translationEn && !translating) {
+      startTranslation(result, selectedRepositoryEntryId);
+    }
+  }, [language, result, translating, startTranslation]);
 
   const handleSaveToRepository = useCallback(async () => {
     if (!result) return;
 
-    const baseTitle = repoTitle.trim();
-    if (!baseTitle) {
-      setError('Sila isi medan title sebelum simpan ke repository.');
+    const titleInput = repoTitle.trim();
+    if (!titleInput) {
+      setError(
+        language === 'en'
+          ? 'Please fill in a title before saving to the repository.'
+          : 'Sila isi medan title sebelum simpan ke repository.'
+      );
       return;
     }
 
-    let finalTitle = baseTitle;
+    // Deduplicate title — append (2), (3)… if the same title already exists
+    let finalTitle = titleInput;
     let index = 2;
     while (repositoryData.some((entry) => entry.id === finalTitle)) {
-      finalTitle = `${baseTitle} (${index})`;
+      finalTitle = `${titleInput} (${index})`;
       index += 1;
     }
 
-    const newEntry: RepositoryEntry = {
-      id: finalTitle,
-      text: text.trim(),
-      result
+    const entryResult: GenerationResult = {
+      ...result,
+      theme: repoTheme,
+      translationEn: result.translationEn
     };
+
+    const newEntry: RepositoryEntry = { id: finalTitle, text: text.trim(), result: entryResult };
 
     try {
       await saveRepositoryEntryApi(newEntry);
@@ -136,15 +226,18 @@ const App: React.FC = () => {
       setSelectedRepositoryEntryId(finalTitle);
       setRepoTitle('');
       setError(null);
-      setSaveNotice(`Disimpan ke repository sebagai: ${finalTitle}`);
+      setSaveNotice(
+        language === 'en'
+          ? `Saved to repository as: ${finalTitle}`
+          : `Disimpan ke repository sebagai: ${finalTitle}`
+      );
     } catch (err: any) {
       setError(err?.message || 'Gagal menyimpan ke repository.');
     }
-  }, [repoTitle, repositoryData, result, text]);
+  }, [language, repoTheme, repoTitle, repositoryData, result, text]);
 
   const handleDeleteRepositoryEntry = useCallback(async (entryId: string) => {
     if (!isTeacherMode) return;
-
     try {
       await deleteRepositoryEntryApi(entryId);
       setRepositoryData((prev) => prev.filter((entry) => entry.id !== entryId));
@@ -167,9 +260,7 @@ const App: React.FC = () => {
     setResult(updatedResult);
     setSaveNotice(null);
 
-    if (!isTeacherMode || !selectedRepositoryEntryId) {
-      return;
-    }
+    if (!isTeacherMode || !selectedRepositoryEntryId) return;
 
     const selectedEntry = repositoryData.find((entry) => entry.id === selectedRepositoryEntryId);
     const updatedEntry: RepositoryEntry = {
@@ -183,8 +274,23 @@ const App: React.FC = () => {
       setRepositoryData((prev) =>
         prev.map((entry) => (entry.id === selectedRepositoryEntryId ? { ...entry, result: updatedResult } : entry))
       );
-      setError(null);
       setSaveNotice(`Rekod repository dikemaskini: ${selectedRepositoryEntryId}`);
+      setError(null);
+
+      // Re-translate in background after teacher edit
+      setTranslating(true);
+      translateAnalysis(updatedResult)
+        .then((translation: AnalysisTranslation) => {
+          const withTranslation: GenerationResult = { ...updatedResult, translationEn: translation };
+          setResult(withTranslation);
+          const entryWithTranslation: RepositoryEntry = { ...updatedEntry, result: withTranslation };
+          updateRepositoryEntryApi(entryWithTranslation).catch(console.warn);
+          setRepositoryData((prev) =>
+            prev.map((entry) => (entry.id === selectedRepositoryEntryId ? entryWithTranslation : entry))
+          );
+        })
+        .catch(console.warn)
+        .finally(() => setTranslating(false));
     } catch (err: any) {
       setError(err?.message || 'Gagal mengemaskini rekod repository.');
     }
@@ -214,7 +320,6 @@ const App: React.FC = () => {
   const handleTeacherAuthSubmit = useCallback(async () => {
     setTeacherAuthLoading(true);
     setTeacherAuthError(null);
-
     try {
       await verifyTeacherPassword(teacherPasswordInput);
       setTeacherAuthenticated(true);
@@ -230,6 +335,8 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen app-shell pb-20">
       <Header />
+
+      {/* Top action bar */}
       <div className="max-w-6xl mx-auto px-4 pt-4 flex items-center justify-between gap-4">
         <div className="console-switch grid grid-cols-2 w-full max-w-md">
           <button
@@ -253,9 +360,32 @@ const App: React.FC = () => {
             Teacher Console
           </button>
         </div>
-        <RepositoryButton onClick={handleOpenRepo} />
+
+        <div className="flex items-center gap-2">
+          {/* Language toggle */}
+          <button
+            type="button"
+            onClick={handleLanguageToggle}
+            disabled={translating}
+            title={language === 'bm' ? 'Switch to English' : 'Tukar ke Bahasa Melayu'}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition ${
+              language === 'en'
+                ? 'bg-sky-100 border-sky-300 text-sky-800'
+                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+            } ${translating ? 'opacity-60 cursor-not-allowed' : ''}`}
+          >
+            <Languages className="w-4 h-4" strokeWidth={2} />
+            {translating ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <span>{language === 'bm' ? 'BM' : 'EN'}</span>
+            )}
+          </button>
+          <RepositoryButton onClick={handleOpenRepo} />
+        </div>
       </div>
 
+      {/* Repository modal */}
       {repoOpen && (
         <Repository
           entries={repositoryData}
@@ -263,9 +393,11 @@ const App: React.FC = () => {
           onClose={handleCloseRepo}
           isTeacherMode={isTeacherMode}
           onDelete={handleDeleteRepositoryEntry}
+          language={language}
         />
       )}
 
+      {/* Teacher auth modal */}
       {showTeacherAuthModal && (
         <div className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center px-4">
           <div className="w-full max-w-md surface-card p-6">
@@ -275,11 +407,7 @@ const App: React.FC = () => {
               type="password"
               value={teacherPasswordInput}
               onChange={(event) => setTeacherPasswordInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  handleTeacherAuthSubmit();
-                }
-              }}
+              onKeyDown={(event) => { if (event.key === 'Enter') handleTeacherAuthSubmit(); }}
               placeholder="Kata laluan"
               className="w-full px-3 py-2 text-sm input-surface text-black placeholder-slate-500 rounded-lg outline-none"
             />
@@ -307,11 +435,12 @@ const App: React.FC = () => {
 
       <main className="max-w-6xl mx-auto px-4 pt-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left panel */}
           <div className="lg:col-span-1 space-y-6">
             <div className="surface-card p-6">
               <label className="flex items-center gap-1.5 text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">
                 <FileText className="w-4 h-4" strokeWidth={2} />
-                Bacaan Anda
+                {language === 'en' ? 'Your Reading' : 'Bacaan Anda'}
               </label>
               <textarea
                 value={text}
@@ -319,7 +448,11 @@ const App: React.FC = () => {
                   setText(e.target.value);
                   setSelectedRepositoryEntryId(null);
                 }}
-                placeholder="Tampal teks (Bahasa Melayu atau Inggeris) yang ingin anda teroka di sini..."
+                placeholder={
+                  language === 'en'
+                    ? 'Paste your text (Malay or English) here to explore...'
+                    : 'Tampal teks (Bahasa Melayu atau Inggeris) yang ingin anda teroka di sini...'
+                }
                 className="w-full h-[500px] p-4 text-sm input-surface rounded-xl transition-all resize-none outline-none leading-relaxed"
               />
               <button
@@ -334,12 +467,16 @@ const App: React.FC = () => {
                 {loading ? (
                   <>
                     <Loader2 className="animate-spin h-5 w-5 text-white" />
-                    Sedang Meneroka...
+                    {language === 'en' ? 'Exploring...' : 'Sedang Meneroka...'}
                   </>
                 ) : (
                   <>
                     <Lightbulb className="w-5 h-5 flex-shrink-0 ml-2" strokeWidth={2} />
-                    <span className="text-center pr-7">Teroka Idea Baharu Dengan Menggunakan EMPAT Lensa</span>
+                    <span className="text-center pr-7">
+                      {language === 'en'
+                        ? 'Explore New Ideas Using FOUR Lenses'
+                        : 'Teroka Idea Baharu Dengan Menggunakan EMPAT Lensa'}
+                    </span>
                   </>
                 )}
               </button>
@@ -348,21 +485,47 @@ const App: React.FC = () => {
                 <div className="mt-4 p-4 surface-soft space-y-3">
                   <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wide">
                     <Bookmark className="w-3.5 h-3.5" strokeWidth={2} />
-                    title
+                    {language === 'en' ? 'Title' : 'Tajuk'}
                   </label>
                   <input
                     type="text"
                     value={repoTitle}
                     onChange={(event) => setRepoTitle(event.target.value)}
-                    placeholder="Masukkan title untuk repository"
+                    placeholder={
+                      language === 'en'
+                        ? 'Enter a title for the repository'
+                        : 'Masukkan title untuk repository'
+                    }
                     className="w-full px-3 py-2 text-sm input-surface rounded-lg outline-none"
                   />
+
+                  {/* Theme selector */}
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    {language === 'en' ? 'Theme' : 'Tema'}
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {THEME_OPTIONS.map((t) => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        onClick={() => setRepoTheme(t.value)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
+                          repoTheme === t.value
+                            ? t.colorClass + ' ring-2 ring-offset-1 ring-current'
+                            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {language === 'en' ? t.labelEn : t.labelBm}
+                      </button>
+                    ))}
+                  </div>
+
                   <button
                     type="button"
                     onClick={handleSaveToRepository}
                     className="w-full py-2.5 rounded-lg font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-100 transition"
                   >
-                    save to Repository
+                    {language === 'en' ? 'Save to Repository' : 'Simpan ke Repository'}
                   </button>
                   {saveNotice && <p className="text-xs text-emerald-700 font-medium">{saveNotice}</p>}
                 </div>
@@ -377,14 +540,21 @@ const App: React.FC = () => {
             )}
           </div>
 
+          {/* Right panel */}
           <div className="lg:col-span-2 space-y-6">
             {!result && !loading && (
               <div className="h-[600px] empty-state rounded-3xl flex flex-col items-center justify-center text-slate-400 p-12 text-center">
                 <div className="bg-slate-100 p-5 rounded-full mb-5">
                   <Sparkles className="w-12 h-12 text-emerald-400" strokeWidth={1.5} />
                 </div>
-                <h2 className="text-xl font-semibold text-slate-600">Sedia Untuk Menjana Idea</h2>
-                <p className="mt-2 max-w-sm">Tampal teks anda (Bahasa Melayu atau Inggeris) di kiri dan klik butang untuk melihat bagaimana lensa berbeza boleh membantu anda menulis perenggan yang lebih mantap!</p>
+                <h2 className="text-xl font-semibold text-slate-600">
+                  {language === 'en' ? 'Ready to Generate Ideas' : 'Sedia Untuk Menjana Idea'}
+                </h2>
+                <p className="mt-2 max-w-sm">
+                  {language === 'en'
+                    ? 'Paste your text (Malay or English) on the left and click the button to see how different lenses can help you write stronger paragraphs!'
+                    : 'Tampal teks anda (Bahasa Melayu atau Inggeris) di kiri dan klik butang untuk melihat bagaimana lensa berbeza boleh membantu anda menulis perenggan yang lebih mantap!'}
+                </p>
               </div>
             )}
 
@@ -403,29 +573,45 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {result && (
+            {result && displayResult && (
               <div className="space-y-8 result-stack-enter">
                 <div className="hero-gradient text-white rounded-3xl p-8 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-10">
                     <Sparkles className="w-48 h-48" strokeWidth={0.75} />
                   </div>
                   <div className="relative z-10">
-                    <h2 className="text-2xl font-extrabold mb-3">Teroka Perspektif Menulis</h2>
-                    <p className="text-emerald-100 leading-relaxed mb-4">{result.advice}</p>
+                    <h2 className="text-2xl font-extrabold mb-3">
+                      {language === 'en' ? 'Explore Writing Perspectives' : 'Teroka Perspektif Menulis'}
+                    </h2>
+                    <p className="text-emerald-100 leading-relaxed mb-4">{displayResult.advice}</p>
                     <div className="flex items-center gap-2 text-sm font-medium bg-white/10 w-fit px-3 py-1.5 rounded-full border border-white/20">
                       <Lightbulb className="w-4 h-4" strokeWidth={2} />
-                      Tip: Gunakan "Ayat Topik" di bawah untuk memulakan perenggan anda sendiri.
+                      {language === 'en'
+                        ? 'Tip: Use the "Topic Sentence" below to start your own paragraph.'
+                        : 'Tip: Gunakan "Ayat Topik" di bawah untuk memulakan perenggan anda sendiri.'}
                     </div>
+                    {language === 'en' && translating && (
+                      <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-200">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Generating English translation…
+                      </div>
+                    )}
+                    {language === 'en' && !translating && !result.translationEn && (
+                      <div className="mt-3 text-xs text-emerald-200">
+                        Translation unavailable — please generate the analysis again.
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
-                  {result.lenses.map((lensData, index) => (
+                  {displayResult.lenses.map((lensData, index) => (
                     <LensCard
                       key={index}
                       data={lensData}
-                      editable={isTeacherMode}
+                      editable={isTeacherMode && language === 'bm'}
                       onChange={(updatedLens) => handleUpdateLens(index, updatedLens)}
+                      language={language}
                     />
                   ))}
                 </div>
@@ -434,7 +620,6 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
-
     </div>
   );
 };

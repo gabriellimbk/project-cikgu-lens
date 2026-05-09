@@ -11,10 +11,26 @@ export interface LensOutput {
   paragraphSource: string;
 }
 
-export interface GenerationResult {
+export type RepositoryTheme =
+  | 'society-culture'
+  | 'economics'
+  | 'politics'
+  | 'arts'
+  | 'science-technology'
+  | 'environment'
+  | 'others';
+
+export type AnalysisLanguage = 'bm' | 'en';
+
+export interface AnalysisTranslation {
   title: string;
   advice: string;
   lenses: LensOutput[];
+}
+
+export interface GenerationResult extends AnalysisTranslation {
+  translationEn?: AnalysisTranslation;
+  theme?: RepositoryTheme;
 }
 
 export interface RepositoryEntry {
